@@ -192,7 +192,7 @@ class Home(QMainWindow):
                         }
 
                         QPushButton:hover {
-                            background-color: #B3B3B3;
+                            background-color: #B3B3B3h;
                         }
 
                     """)
