@@ -11,6 +11,7 @@ class DetectionWorker(QThread):
     def __init__(self, app_signals):
         super().__init__()
         self.app_signals = app_signals
+        self.paused = False
         self.running = False
         self.last_rep_time = 0 # keeps track of the last rep time for detecting rest or mid-set time
         self.status = "resting" # resting by default until the first rep
@@ -24,20 +25,20 @@ class DetectionWorker(QThread):
         self.set_training_time = 0
         self.rest_training_time = 0
 
-        self.app_signals.stop_detection.connect(self.stop_detection)
+        self.app_signals.end_detection.connect(self.end_detection)
         self.app_signals.start_detection.connect(self.start_detection)
+        self.app_signals.pause_detection.connect(self.pause_detection)
 
     def capture_and_detect_video(self):
         # VIDEO FEED
         cap = cv2.VideoCapture(0)  # Camera code may be changed depending on the device
-
+        counter = 0
 
         with mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5) as pose:
-            counter = 0
             stage = "down"
             times_hist = []
             rep_start_time = None
-            while cap.isOpened() and self.running:
+            while cap.isOpened() and self.running and not self.paused:
                 ret, frame = cap.read()
 
                 # Recolor image to RGB
@@ -95,11 +96,12 @@ class DetectionWorker(QThread):
                 cv2.imshow('frame', image)
 
 
-                if cv2.waitKey(10) & 0xFF == ord('q') or not self.running:
-                    self.stop_detection()
+                if cv2.waitKey(10) & 0xFF == ord('\n') or not self.running:
+                    self.end_detection()
 
-            cap.release()
-            cv2.destroyAllWindows()
+            if not self.paused: # Kills the process if it stops and is not paused
+                cap.release()
+                cv2.destroyAllWindows()
 
     def start_detection(self):
         self.total_training_time = 0
@@ -107,11 +109,21 @@ class DetectionWorker(QThread):
         self.rest_training_time = 0
         self.training_timer.start(1000)
         self.running = True
+        self.paused = False
         self.capture_and_detect_video()
 
-    def stop_detection(self):
+    def end_detection(self):
         self.training_timer.stop()
         self.running = False
+
+    def pause_detection(self, paused:bool):
+        self.paused = paused
+        if paused:
+            self.training_timer.stop()
+        else:
+            self.training_timer.start(1000)
+            self.capture_and_detect_video()
+
 
     def update_total_training_time(self):
         self.total_training_time += 1
